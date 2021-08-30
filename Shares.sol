@@ -27,15 +27,13 @@ contract Shares is Ownable {
     function sendTo(address to, uint256 amount) external onlyTrusted {
         updatePrice();
         
+        uint256 distribution = sharesPrice * amount / 1e18;
         uint256 balance = token.balanceOf(address(this));
-        uint256 total = sharesPrice * amount / 1e18;
-        
-        if (total < balance) {
-             updatePrice();
+        if (distribution > balance) {
+            distribution = balance;
         }
-        
-        token.safeTransfer(to, sharesPrice * amount / 1e18);
-        
+        token.safeTransfer(to, distribution);
+
         emit SentTo(to, amount);
     }
 

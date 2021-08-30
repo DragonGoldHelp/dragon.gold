@@ -16,7 +16,6 @@ import "./DGoldToken.sol";
 
 interface IShares {
     function sendTo(address to, uint256 amount) external;
-    function updatePrice() external;
 }
 
 contract MasterChef is ReentrancyGuard, Ownable {
@@ -140,6 +139,8 @@ contract MasterChef is ReentrancyGuard, Ownable {
             _massUpdatePools();
         }
         
+        poolExistence[_lpToken] = true;
+        
         _lpToken.balanceOf(address(this));
         
         uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
@@ -192,7 +193,7 @@ contract MasterChef is ReentrancyGuard, Ownable {
 
     //Pancake has to add hidden dummy pools inorder to alter the emission, here we make it simple and transparent to all.
     function updateEmissionRate(uint256 _shPerBlock) external onlyOwner {
-        require(_shPerBlock <= 100,"Too high");
+        require(_shPerBlock <= 100 * 1e18,"Too high");
         
         _massUpdatePools();
         shPerBlock = _shPerBlock;
@@ -254,9 +255,10 @@ contract MasterChef is ReentrancyGuard, Ownable {
         UserInfo storage user = userInfo[_pid][msg.sender];
         _updatePool(_pid);
         _keepPendingShAndShares(_pid, msg.sender);
-        uint256 balance = pool.lpToken.balanceOf(address(this));
         
         if(_amount > 0) {
+            uint256 balance = pool.lpToken.balanceOf(address(this));
+            
             pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
             
 
@@ -267,7 +269,6 @@ contract MasterChef is ReentrancyGuard, Ownable {
                 uint256 feeAddressAmount = depositFee * 3/5;
                 pool.lpToken.safeTransfer(feeAddress, feeAddressAmount);
                 pool.lpToken.safeTransfer(sharesAddress, depositFee - feeAddressAmount);
-                shares.updatePrice();
                 amount -= depositFee;
             }
             
