@@ -11,82 +11,57 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 contract Shares is Ownable {
     using SafeERC20 for IERC20;
 
-    IERC20 public token;
-    uint public percent = 5;
-
-    uint public startBlock;
-    uint public circleTime = 74000;
-
-    mapping (uint => uint) public sharesPrice;
-
-    constructor(IERC20 _token, uint _startBlock) {
-        token = _token;
-        startBlock = _startBlock;
-    }
-
-    function currentCircle() public view returns (uint) {
-        if (startBlock > block.number) {
-            return 0;
-        }
-        return (block.number - startBlock) / circleTime;
-    }
+    IERC20 public immutable token = IERC20(0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174);
+    uint256 public immutable percent = 10;
+    uint256 public immutable startBlock = 18766000;
+    uint256 public sharesPrice = 0;
     
-    function blocksLeft() public view returns (uint) {
-        if (startBlock > block.number) {
-            return 0;
-        }
-        return circleTime - ((block.number - startBlock) % circleTime);
-    }
+    event PriceUpdated(uint price);
+    event AddedTrusted(address user);
+    event RemovedTrusted(address user);
+    event SentTo(address user,uint amount);
     
     
-    function currentPrice() public view returns (uint) {
-        uint current = currentCircle();
-        if (sharesPrice[current] == 0) {
-            return token.balanceOf(address(this)) * percent / 100;
-        } else {
-            return sharesPrice[current];
-        }
-    }
-    
-    function sendTo(address to, uint amount) external onlyTrusted {
+    constructor() { }
+
+    function sendTo(address to, uint256 amount) external onlyTrusted {
         updatePrice();
         
-        token.safeTransfer(to, sharesPrice[currentCircle()] * amount / 1e18);
+        uint256 balance = token.balanceOf(address(this));
+        uint256 total = sharesPrice * amount / 1e18;
+        
+        if (total < balance) {
+             updatePrice();
+        }
+        
+        token.safeTransfer(to, sharesPrice * amount / 1e18);
+        
+        emit SentTo(to, amount);
     }
 
     function updatePrice() public onlyTrusted {
-        uint current = currentCircle();
-        if (sharesPrice[current] == 0) {
-            sharesPrice[current] = token.balanceOf(address(this)) * percent / 100;
-            percent += 1;
+        if (sharesPrice < token.balanceOf(address(this)) || startBlock < block.number || sharesPrice == 0) {
+            sharesPrice = token.balanceOf(address(this)) * percent / 100;
         }
-    }
-
-    function addMoneyAndRecalculate(uint amount) external onlyTrusted {
-        token.safeTransferFrom(address(msg.sender), address(this), amount);
-        sharesPrice[currentCircle()] = token.balanceOf(address(this)) * percent / 100;
-    }
-
-    function setPercent(uint _percent) external onlyOwner {
-        percent = _percent;
+        
+        emit PriceUpdated(sharesPrice);
     }
     
-    function withdraw() public onlyOwner {
-        token.safeTransfer(msg.sender, token.balanceOf(address(this)));
-    }
-    
-
-    mapping(address=>bool) private _isTrusted;
+    mapping(address=>bool) public _isTrusted;
     modifier onlyTrusted {
         require(_isTrusted[msg.sender] || msg.sender == owner(), "not trusted");
         _;
     }
 
-    function addTrusted(address user) public onlyOwner {
+    function addTrusted(address user) external onlyOwner {
         _isTrusted[user] = true;
+        
+        emit AddedTrusted(user);
     }
 
-    function removeTrusted(address user) public onlyOwner {
+    function removeTrusted(address user) external onlyOwner {
         _isTrusted[user] = false;
+        
+        emit RemovedTrusted(user);
     }
 }
