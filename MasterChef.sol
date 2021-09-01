@@ -334,7 +334,7 @@ contract MasterChef is ReentrancyGuard, Ownable {
     }
 
     // Withdraw without caring about rewards. EMERSHCY ONLY.
-    function emergencyWithdraw(uint256 _pid) external {
+    function emergencyWithdraw(uint256 _pid) external nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
 

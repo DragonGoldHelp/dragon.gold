@@ -24,7 +24,7 @@ contract Shares is Ownable {
     
     constructor() { }
 
-    function sendTo(address to, uint256 amount) external onlyTrusted {
+    function sendTo(address to, uint256 amount) external onlyOwner {
         updatePrice();
         
         uint256 distribution = sharesPrice * amount / 1e18;
@@ -37,7 +37,7 @@ contract Shares is Ownable {
         emit SentTo(to, amount);
     }
 
-    function updatePrice() public onlyTrusted {
+    function updatePrice() public onlyOwner {
         if (sharesPrice < token.balanceOf(address(this)) || startBlock < block.number || sharesPrice == 0) {
             sharesPrice = token.balanceOf(address(this)) * percent / 100;
         }
@@ -45,21 +45,8 @@ contract Shares is Ownable {
         emit PriceUpdated(sharesPrice);
     }
     
-    mapping(address=>bool) public _isTrusted;
-    modifier onlyTrusted {
-        require(_isTrusted[msg.sender] || msg.sender == owner(), "not trusted");
-        _;
-    }
-
-    function addTrusted(address user) external onlyOwner {
-        _isTrusted[user] = true;
-        
-        emit AddedTrusted(user);
-    }
-
-    function removeTrusted(address user) external onlyOwner {
-        _isTrusted[user] = false;
-        
-        emit RemovedTrusted(user);
+    function firstUpdatePrice() public {
+        require(sharesPrice == 0, "already Set");
+        updatePrice();
     }
 }
