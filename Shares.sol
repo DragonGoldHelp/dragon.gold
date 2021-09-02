@@ -13,7 +13,7 @@ contract Shares is Ownable {
 
     IERC20 public immutable token = IERC20(0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174);
     uint256 public immutable percent = 10;
-    uint256 public immutable startBlock = 18766000;
+    uint256 public immutable startBlock = 18981555;
     uint256 public sharesPrice = 0;
     
     event PriceUpdated(uint price);
@@ -46,7 +46,7 @@ contract Shares is Ownable {
     }
     
     function firstUpdatePrice() public {
-        require(sharesPrice == 0, "already Set");
+        require(sharesPrice == 0 || startBlock < block.number, "already Set");
         updatePrice();
     }
 }
