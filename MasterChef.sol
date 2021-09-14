@@ -10,8 +10,9 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-import "./DGoldToken.sol";
 
+import "./DGoldToken.sol";
+import "./DragonLocker.sol";
 
 
 interface IShares {
@@ -20,6 +21,7 @@ interface IShares {
 
 contract MasterChef is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
+    
 
     // Info of each user.
     struct UserInfo {
@@ -54,7 +56,8 @@ contract MasterChef is ReentrancyGuard, Ownable {
     // Deposit Fee address
     address public feeAddress;
     address public sharesAddress;
-
+    DragonLocker public locker;
+    
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
@@ -83,6 +86,7 @@ contract MasterChef is ReentrancyGuard, Ownable {
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
     event Claim(address indexed user, uint256 indexed pid, uint256 amount);
+    event Lock(address indexed user, uint256 indexed pid, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
     
     event AddPool(uint256 _allocPoint, IERC20 _lpToken, uint16 _depositFeeBP, bool _withUpdate);
@@ -98,6 +102,7 @@ contract MasterChef is ReentrancyGuard, Ownable {
     constructor (
         DGoldToken _sh,
         IShares _shares,
+        DragonLocker _locker,
         address _devaddr,
         address _feeAddress,
         address _sharesAddress,
@@ -107,6 +112,7 @@ contract MasterChef is ReentrancyGuard, Ownable {
         require(_devaddr != address(0), "address can't be 0");
         require(_feeAddress != address(0), "address can't be 0");
 
+        locker = _locker;
         sh = _sh;
         shares = _shares;
         devaddr = _devaddr;
@@ -388,17 +394,35 @@ contract MasterChef is ReentrancyGuard, Ownable {
 
         require(pending > 0, "Nothing to claim");
 
-        _safeShTransfer(msg.sender, pending);
-        _rewardReferrers(pending);
-
         uint256 multiplier = aprMultiplier(_pid, msg.sender);
+
+        _rewardReferrers(pending);
+        
+        if (address(locker) != address(0)) {
+            uint256 startReleaseBlock = locker.getStartReleaseBlock();
+            if (block.number < startReleaseBlock) {
+                uint256 _lockerAmount = pending / 2;
+                pending = pending - _lockerAmount;
+                
+                uint256 bonus = _lockerAmount * multiplier / 100;
+                sh.mint(address(this), bonus);
+                
+                IERC20(sh).safeIncreaseAllowance(address(locker), _lockerAmount + bonus);
+                locker.lock(msg.sender, _lockerAmount + bonus); 
+                
+                emit Lock(msg.sender, _pid, _lockerAmount + bonus);
+            }
+        }
+
+        _safeShTransfer(msg.sender, pending);
         
         if (multiplier > 0) {
             sh.mint(msg.sender, pending * multiplier / 100);
         }
 
         emit Claim(msg.sender, _pid, pending + pending * multiplier / 100);
-
+        
+        
         user.rewardKept = 0;
         user.rewardDebt = user.amount * pool.accShPerPower / 1e12;
         user.lastClaimedBlock = block.number;
@@ -411,13 +435,27 @@ contract MasterChef is ReentrancyGuard, Ownable {
         _updatePool(_pid);
 
         uint256 pending = user.rewardKept + _pendingSh(_pid, msg.sender);
-
         require(pending > 0, "Nothing to claim");
-
+        
         _rewardReferrers(pending);
-
+        
         uint256 multiplier = aprMultiplier(_pid, msg.sender);
         
+        if (address(locker) != address(0)) {
+            uint256 startReleaseBlock = locker.getStartReleaseBlock();
+            if (block.number < startReleaseBlock) {
+                uint256 _lockerAmount = pending / 2;
+                pending = pending - _lockerAmount;
+                
+                uint256 bonus = _lockerAmount * multiplier / 100;
+                sh.mint(address(this), bonus);
+                IERC20(sh).safeIncreaseAllowance(address(locker), _lockerAmount + bonus);
+                locker.lock(msg.sender, _lockerAmount + bonus); 
+                
+                emit Lock(msg.sender, _pid, _lockerAmount + bonus);
+            }
+        }
+
         if (multiplier > 0) {
             sh.mint(address(this), pending * multiplier / 100);
         }
